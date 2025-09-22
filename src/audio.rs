@@ -118,7 +118,7 @@ pub fn decode_audio_wav(
             }
         }
     }
-    return Ok((all_samples, sample_rate));
+    Ok((all_samples, sample_rate))
 }
 
 fn convert_samples_to_f32<S>(
