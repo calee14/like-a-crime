@@ -21,7 +21,7 @@ fn main() {
 
     // plot the waveform
     if !all_samples.is_empty() {
-        plot::plot_waveform(&windowed_samples[0], sample_rate).expect("Failed to plot waveform");
+        plot::plot_waveform(&windowed_samples[10], sample_rate).expect("Failed to plot waveform");
         println!(
             "Plotted {} samples at {} Hz",
             all_samples.len(),

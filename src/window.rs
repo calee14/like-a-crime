@@ -23,7 +23,8 @@ pub fn window_audio_samples(
         Err(err) => panic!("{}", err),
     };
 
-    for pos in (0..window_size).step_by(hop_size) {
+    let end_pos = samples.len() - window_size;
+    for pos in (0..end_pos).step_by(hop_size) {
         let chunk = &samples[pos..(pos + window_size)];
         let mut window_chunk: Vec<f32> = vec![0.0; window_size];
         for i in 0..window_size - 1 {
