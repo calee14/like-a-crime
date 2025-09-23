@@ -11,7 +11,7 @@ use std::vec::Vec;
 
 pub fn decode_audio_wav(
     path: &String,
-    sample_rate: u32,
+    sample_rate: f32,
 ) -> Result<(Vec<f32>, f32), Box<dyn std::error::Error>> {
     let src = std::fs::File::open(path).expect("failed to open media");
 
@@ -44,7 +44,7 @@ pub fn decode_audio_wav(
     let track_id = track.id;
 
     let mut all_samples: Vec<f32> = Vec::new();
-    let sample_rate = track.codec_params.sample_rate.unwrap_or(sample_rate) as f32;
+    let sample_rate = track.codec_params.sample_rate.unwrap_or(sample_rate as u32) as f32;
 
     loop {
         // get packet from media

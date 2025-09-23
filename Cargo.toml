@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 plotters = "0.3.7"
+realfft = "3.5.0"
 symphonia = "0.5.4"
