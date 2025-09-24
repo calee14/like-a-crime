@@ -43,9 +43,9 @@ fn main() {
     }
 
     for i in 10000..10020 {
-        // for mag in magnitude_samples[i].iter() {
-        print!("{} ", frequencies[i]);
-        // }
+        for mag in frequencies[i].iter() {
+            print!("{} ", *mag);
+        }
         println!();
     }
 }

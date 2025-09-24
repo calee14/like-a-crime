@@ -68,6 +68,7 @@ pub fn decode_audio_wav(
             continue;
         }
 
+        // decode packet by data type
         match decoder.decode(&packet) {
             Ok(decoded) => {
                 // store samples
