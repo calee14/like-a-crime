@@ -3,9 +3,11 @@ mod audio;
 mod fft;
 mod notes;
 mod plot;
+mod stream;
 mod window;
 
 use crate::analyzer::AudioAnalyzer;
+use crate::stream::StreamingPlayer;
 
 static WINDOW_SIZE: usize = 2048;
 static SAMPLE_RATE: f32 = 44100.0;

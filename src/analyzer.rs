@@ -11,7 +11,7 @@ pub struct AudioAnalyzer {
 }
 
 impl AudioAnalyzer {
-    fn new(sample_rate: f32, result_sender: mpsc::Sender<(Duration, String)>) -> Self {
+    pub fn new(sample_rate: f32, result_sender: mpsc::Sender<(Duration, String)>) -> Self {
         Self {
             sample_rate,
             result_sender,
@@ -19,7 +19,7 @@ impl AudioAnalyzer {
         }
     }
 
-    fn run(&mut self, receiver: mpsc::Receiver<Vec<f32>>) {
+    pub fn run(&mut self, receiver: mpsc::Receiver<Vec<f32>>) {
         while let Ok(samples) = receiver.recv() {
             let start_time = Instant::now();
 
