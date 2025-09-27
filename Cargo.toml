@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+cpal = "0.16.0"
 lazy_static = "1.5.0"
 plotters = "0.3.7"
 realfft = "3.5.0"

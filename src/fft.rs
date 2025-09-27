@@ -24,6 +24,24 @@ pub fn fft_chunks(
     Ok(frequencies)
 }
 
+pub fn fft_chunk(
+    window_sample: &[f32],
+    sample_rate: f32,
+    k_per_band: usize,
+) -> Result<Vec<Vec<f32>>, Box<dyn std::error::Error>> {
+    let window_size = window_sample.len();
+    let mut planner = RealFftPlanner::<f32>::new();
+    let fft = planner.plan_fft_forward(window_size);
+
+    let mut spectrum = vec![Complex::default(); window_size / 2 + 1];
+    let mut chunk = window_sample.to_vec();
+    fft.process(&mut chunk, &mut spectrum)?;
+
+    let band_frequencies = analyze_frequency_bands(&spectrum, sample_rate, window_size, k_per_band);
+
+    Ok(band_frequencies)
+}
+
 fn analyze_frequency_bands(
     spectrum: &[Complex<f32>],
     sample_rate: f32,

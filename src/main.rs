@@ -1,8 +1,11 @@
+mod analyzer;
 mod audio;
 mod fft;
 mod notes;
 mod plot;
 mod window;
+
+use crate::analyzer::AudioAnalyzer;
 
 static WINDOW_SIZE: usize = 2048;
 static SAMPLE_RATE: f32 = 44100.0;
