@@ -27,7 +27,10 @@ impl AudioStreamer {
         mpsc::Receiver<(Duration, Vec<f32>)>,
     ) {
         let chunk_size = ((sample_rate * chunk_duration_ms as f32) / 1000.0) as usize;
-        let update_interval = Duration::from_millis(chunk_duration_ms);
+        // streaming interval should be slightly faster
+        // so that buffer fills up faster than drains
+        let streaming_interval = (chunk_duration_ms as f64 / 1.26) as u64;
+        let update_interval = Duration::from_millis(streaming_interval);
 
         let (audio_tx, audio_rx) = mpsc::channel();
         let (analysis_tx, analysis_rx) = mpsc::channel();
