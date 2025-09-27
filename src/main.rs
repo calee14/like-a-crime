@@ -25,7 +25,7 @@ fn main() {
     };
 
     // get frequencies using fft applied to chunks
-    let frequencies = match fft::fft_chunks(&windowed_samples, WINDOW_SIZE, SAMPLE_RATE) {
+    let frequencies = match fft::fft_chunks(&windowed_samples, WINDOW_SIZE, SAMPLE_RATE, 3) {
         Ok(v) => v,
         Err(err) => panic!("{}", err),
     };
@@ -35,7 +35,7 @@ fn main() {
         .map(|bands| {
             bands
                 .iter()
-                .map(|freq| notes::frequency_to_note(*freq))
+                .map(|freq| notes::frequency_to_note(freq))
                 .collect::<Vec<String>>()
         })
         .collect::<Vec<Vec<String>>>();

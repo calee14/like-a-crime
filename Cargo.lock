@@ -417,6 +417,7 @@ dependencies = [
 name = "like-a-crime"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "plotters",
  "realfft",
  "symphonia",
