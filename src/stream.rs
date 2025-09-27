@@ -8,7 +8,6 @@ pub struct AudioStreamer {
     samples: Vec<f32>,
     sample_rate: f32,
     current_position: Arc<Mutex<usize>>,
-    playback_start: Instant,
 
     audio_sender: mpsc::Sender<Vec<f32>>,
     analysis_sender: mpsc::Sender<(Duration, Vec<f32>)>,
@@ -38,7 +37,6 @@ impl AudioStreamer {
                 samples,
                 sample_rate,
                 current_position: Arc::new(Mutex::new(0)),
-                playback_start: Instant::now(),
                 audio_sender: audio_tx,
                 analysis_sender: analysis_tx,
                 chunk_size,
@@ -51,16 +49,15 @@ impl AudioStreamer {
 
     pub fn start_streaming(&self) {
         let samples = self.samples.clone();
-        let sample_rate = self.sample_rate.clone();
+        let sample_rate = self.sample_rate;
         let current_position = self.current_position.clone();
         let audio_sender = self.audio_sender.clone();
         let analysis_sender = self.analysis_sender.clone();
         let chunk_size = self.chunk_size;
         let update_interval = self.update_interval;
-        let playback_start = self.playback_start;
 
         thread::spawn(move || {
-            let mut last_udpate = Instant::now();
+            let mut last_update = Instant::now();
 
             loop {
                 // wait for next update
@@ -92,12 +89,12 @@ impl AudioStreamer {
                 };
 
                 // send data to audio buffer
-                if let Err(_) = audio_sender.send(chunk.clone()) {
+                if audio_sender.send(chunk.clone()).is_err() {
                     println!("Audio output buffer full, skipping chunk");
                 }
 
                 // send data to analysis buffer
-                if let Err(_) = analysis_sender.send((timestamp, chunk)) {
+                if analysis_sender.send((timestamp, chunk)).is_err() {
                     println!("Analysis buffer full, skipping chunk");
                 }
 
@@ -108,5 +105,33 @@ impl AudioStreamer {
             }
         });
     }
-}
 
+    pub fn get_current_time(&self) -> Duration {
+        let position = *self.current_position.lock().unwrap();
+        Duration::from_secs_f32(position as f32 / self.sample_rate)
+    }
+
+    pub fn get_current_position(&self) -> usize {
+        *self.current_position.lock().unwrap()
+    }
+
+    pub fn seek_to_time(&self, time: Duration) {
+        let target_position = (time.as_secs_f32() * self.sample_rate) as usize;
+        let mut position = self.current_position.lock().unwrap();
+        *position = target_position.min(self.samples.len());
+    }
+
+    pub fn seek_to_position(&self, sample_position: usize) {
+        let mut position = self.current_position.lock().unwrap();
+        *position = sample_position.min(self.samples.len());
+    }
+
+    pub fn get_total_duration(&self) -> Duration {
+        Duration::from_secs_f32(self.samples.len() as f32 / self.sample_rate)
+    }
+
+    pub fn is_finished(&self) -> bool {
+        let position = *self.current_position.lock().unwrap();
+        position >= self.samples.len()
+    }
+}

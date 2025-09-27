@@ -1,65 +1,44 @@
 use crate::fft::fft_chunk;
 use crate::notes::frequency_to_note;
 use crate::window::window_audio_samples;
-use std::time::Instant;
+use std::thread;
 use std::{sync::mpsc, time::Duration};
 
 pub struct AudioAnalyzer {
     sample_rate: f32,
-    result_sender: mpsc::Sender<(Duration, String)>,
-    current_time: Duration,
 }
 
 impl AudioAnalyzer {
-    pub fn new(sample_rate: f32, result_sender: mpsc::Sender<(Duration, String)>) -> Self {
-        Self {
-            sample_rate,
-            result_sender,
-            current_time: Duration::ZERO,
-        }
+    pub fn new(sample_rate: f32) -> Self {
+        Self { sample_rate }
     }
 
-    pub fn run(&mut self, receiver: mpsc::Receiver<Vec<f32>>) {
-        while let Ok(samples) = receiver.recv() {
-            let start_time = Instant::now();
-
-            if let Ok(result) = self.analyze_chunk(&samples) {
-                // send result with timestamp
-                if self
-                    .result_sender
-                    .send((self.current_time, result))
-                    .is_err()
-                {
-                    break; // Main thread has stopped listening
+    pub fn run(&self, receiver: mpsc::Receiver<(Duration, Vec<f32>)>) {
+        let sample_rate = self.sample_rate;
+        thread::spawn(move || {
+            while let Ok((timestamp, samples)) = receiver.recv() {
+                if let Some(result) = Self::analyze_chunk(&samples, sample_rate) {
+                    println!("[{:?}] Detected: {}", timestamp, result);
                 }
             }
-
-            let chunk_duration = Duration::from_secs_f32(samples.len() as f32 / self.sample_rate);
-            self.current_time += chunk_duration;
-
-            let analysis_time = start_time.elapsed();
-            println!(
-                "Analysis took: {:?} for chunk of {:?}",
-                analysis_time, chunk_duration
-            );
-        }
+        });
     }
 
-    fn analyze_chunk(&self, samples: &[f32]) -> Result<String, Box<dyn std::error::Error>> {
+    fn analyze_chunk(samples: &[f32], sample_rate: f32) -> Option<String> {
         let window_size = samples.len();
         let mut windowed_samples = Vec::new();
 
         // window the entire sample from Sender
-        let _ = window_audio_samples(samples, &mut windowed_samples, window_size);
+        let _ = window_audio_samples(samples, &mut windowed_samples, window_size - 1);
 
         if windowed_samples.is_empty() {
-            return Ok("Silence".to_string());
+            return None;
         }
 
         // extract the one windowed sample
         let first_window = windowed_samples.first().unwrap();
 
-        if let Ok(frequency_bands) = fft_chunk(first_window, self.sample_rate, 3)
+        if let Ok(frequency_bands) = fft_chunk(first_window, sample_rate, 3)
             && !frequency_bands.is_empty()
             && !frequency_bands[0].is_empty()
         {
@@ -69,9 +48,9 @@ impl AudioAnalyzer {
                 .collect::<Vec<String>>()
                 .join("|");
 
-            Ok(band_notes)
+            Some(band_notes)
         } else {
-            Ok("No Signal".to_string())
+            None
         }
     }
 }
