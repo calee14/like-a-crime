@@ -60,11 +60,11 @@ impl TerminalVisualizer {
             // initialize fixed lines once
             print!("\x1B[?25l"); // hide cursor
             print!("\x1B[31;0H"); // line 29
-            print!("Controls: [q]uit | [←][→] seek ±5s | [space] pause");
+            print!("Controls: [q]uit | [j][l] seek ±5s | [k] start/stop");
             print!("\x1B[32;0H"); // line 30
-            print!("Command: ");
+            print!("Command (then press Enter): ");
 
-            print!("\x1B[32;9H");
+            print!("\x1B[32;32H");
             print!("\x1B[?25h"); // show cursor
             io::stdout().flush().unwrap();
 
@@ -104,7 +104,7 @@ impl TerminalVisualizer {
         Self::render_note_history(&data.note_history, history_lines);
 
         // Move cursor to input position (after "Command: ")
-        print!("\x1B[32;9H"); // Line 30, column 9 (after "Command: ")
+        print!("\x1B[32;28H"); // Line 30, column 9 (after "Command: ")
 
         io::stdout().flush().unwrap();
     }

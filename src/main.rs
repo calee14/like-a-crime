@@ -7,9 +7,11 @@ mod stream;
 mod visualizer;
 mod window;
 
-use std::io;
-use std::sync::mpsc;
+use std::io::BufRead;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
+use std::{io, thread};
 
 use crate::analyzer::AudioAnalyzer;
 use crate::audio::decode_audio_wav;
@@ -52,13 +54,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // start visualizer
     visualizer.start_rendering();
 
+    // input detection
+    let should_quit = Arc::new(Mutex::new(false));
+    let should_quit_clone = should_quit.clone();
+
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        let mut lines = stdin.lock().lines();
+        while let Some(Ok(line)) = lines.next() {
+            if line.trim().eq_ignore_ascii_case("q") {
+                let mut should_quit = should_quit_clone.lock().unwrap();
+                *should_quit = true;
+                break;
+            }
+        }
+    });
+
     // keep main loop alive and control threads
     loop {
-        std::thread::sleep(Duration::from_millis(1000));
+        let should_quit = should_quit.lock().unwrap();
+        if *should_quit {
+            break;
+        }
+
+        // explicitly drop lock bc of sleep
+        // avoid deadlock
+        drop(should_quit);
+        std::thread::sleep(Duration::from_millis(500));
 
         // println!("Current time: {:?}", streamer.get_current_time());
     }
 
-    visualizer.cleanup();
+    // visualizer.cleanup();
     Ok(())
 }
