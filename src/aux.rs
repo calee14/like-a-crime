@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
+use crate::visualizer::VisualizerData;
+
 #[derive(Debug, Clone)]
 pub struct AnalysisResult {
     pub timestamp: Duration,
@@ -42,13 +44,17 @@ pub struct AudioOutput {
     // playback tracking
     current_playback_time: Arc<Mutex<Duration>>,
     sample_rate: f32,
+    total_duration: Duration,
+    visualizer_data: Arc<Mutex<VisualizerData>>,
 }
 
 impl AudioOutput {
     pub fn new(
         receiver: mpsc::Receiver<Vec<f32>>,
         analysis_receiver: mpsc::Receiver<AnalysisResult>,
+        visualizer_data: Arc<Mutex<VisualizerData>>,
         sample_rate: f32,
+        total_duration: Duration,
     ) -> Self {
         Self {
             receiver,
@@ -57,6 +63,8 @@ impl AudioOutput {
             analysis_receiver,
             current_playback_time: Arc::new(Mutex::new(Duration::ZERO)),
             sample_rate,
+            total_duration,
+            visualizer_data,
         }
     }
 
@@ -85,7 +93,9 @@ impl AudioOutput {
         let playback_buffer = self.buffer.clone();
         let analysis_results = self.analysis_results.clone();
         let current_time = self.current_playback_time.clone();
+        let visualizer_data = self.visualizer_data.clone();
         let sample_rate = self.sample_rate;
+        let total_duration = self.total_duration;
 
         let stream = device.build_output_stream(
             &config,
@@ -93,14 +103,38 @@ impl AudioOutput {
                 let mut buf = playback_buffer.lock().unwrap();
                 let mut current_timestamp = current_time.lock().unwrap();
 
+                let mut frame_samples = Vec::with_capacity(data.len());
+
                 for sample in data.iter_mut() {
-                    *sample = buf.pop_front().unwrap_or(0.0);
+                    let audio_sample = buf.pop_front().unwrap_or(0.0);
+                    *sample = audio_sample;
+
+                    // add frames for visualizer
+                    frame_samples.push(audio_sample);
 
                     // update current playback time
                     *current_timestamp += Duration::from_secs_f32(1.0 / sample_rate);
                 }
 
-                Self::check_and_display_analysis(&analysis_results, *current_timestamp);
+                // update visualizer data
+                {
+                    let mut vis_data = visualizer_data.lock().unwrap();
+
+                    vis_data.current_time = *current_timestamp;
+                    vis_data.total_duration = total_duration;
+
+                    vis_data.amplitude_samples.extend(frame_samples);
+                    let vis_len = vis_data.amplitude_samples.len();
+                    if vis_len > 2048 {
+                        vis_data.amplitude_samples.drain(0..vis_len - 2048);
+                    }
+                }
+
+                Self::check_and_display_analysis(
+                    &analysis_results,
+                    *current_timestamp,
+                    &visualizer_data,
+                );
 
                 // warn
                 if buf.len() < 4410 {
@@ -153,6 +187,7 @@ impl AudioOutput {
     fn check_and_display_analysis(
         analysis_results: &Arc<Mutex<BinaryHeap<Reverse<AnalysisResult>>>>,
         current_time: Duration,
+        visualizer_data: &Arc<Mutex<VisualizerData>>,
     ) {
         let mut results = analysis_results.lock().unwrap();
 
@@ -160,7 +195,19 @@ impl AudioOutput {
         while let Some(Reverse(front_result)) = results.peek() {
             if front_result.timestamp <= current_time {
                 let Reverse(result) = results.pop().unwrap();
-                println!("🎵 [{:?}] {}", result.timestamp, result.note);
+
+                {
+                    let mut vis_data = visualizer_data.lock().unwrap();
+                    vis_data.current_note = Some(result.note.clone());
+                    vis_data
+                        .note_history
+                        .push_back((result.timestamp, result.note));
+
+                    if vis_data.note_history.len() > 20 {
+                        vis_data.note_history.pop_front();
+                    }
+                }
+                // println!("🎵 [{:?}] {}", result.timestamp, result.note);
             } else {
                 break; // Stop when we hit a future timestamp
             }
