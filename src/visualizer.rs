@@ -53,7 +53,19 @@ impl TerminalVisualizer {
         let history_lines = self.history_lines;
 
         thread::spawn(move || {
-            print!("\x1B[?25l\x1B[2J");
+            // push existing content up by printing 30 blank lines
+            for _ in 0..30 {
+                println!();
+            }
+            // initialize fixed lines once
+            print!("\x1B[?25l"); // hide cursor
+            print!("\x1B[31;0H"); // line 29
+            print!("Controls: [q]uit | [←][→] seek ±5s | [space] pause");
+            print!("\x1B[32;0H"); // line 30
+            print!("Command: ");
+
+            print!("\x1B[32;9H");
+            print!("\x1B[?25h"); // show cursor
             io::stdout().flush().unwrap();
 
             loop {
@@ -66,32 +78,33 @@ impl TerminalVisualizer {
     }
 
     fn render_frame(data: &VisualizerData, waveform_width: usize, history_lines: usize) {
-        // Move cursor to top-left
-        print!("\x1B[2J\x1B[H");
+        // Clear only content area (lines 1-27)
+        for line in 1..28 {
+            print!("\x1B[{};0H\x1B[2K", line);
+        }
 
-        // Title bar
+        // Move to top
+        print!("\x1B[H");
+
+        // Render all dynamic content
         println!(
             "🎵 Time: {:?} / {:?}",
             data.current_time, data.total_duration
         );
 
-        // Current note (large display)
         let current_note = data.current_note.as_deref().unwrap_or("♪ Analyzing...");
         println!("🎼 Current: {}", current_note);
         println!();
 
-        // Waveform visualizer
         println!("Waveform:");
         Self::render_waveform(&data.amplitude_samples, waveform_width);
         println!();
 
-        // Note history
         println!("Note History:");
         Self::render_note_history(&data.note_history, history_lines);
 
-        // Controls hint
-        println!();
-        print!("Controls: [q]uit | [←][→] seek ±5s | [space] pause\x1B[K");
+        // Move cursor to input position (after "Command: ")
+        print!("\x1B[32;9H"); // Line 30, column 9 (after "Command: ")
 
         io::stdout().flush().unwrap();
     }
