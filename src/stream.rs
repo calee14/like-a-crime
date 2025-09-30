@@ -151,6 +151,45 @@ impl AudioStreamer {
         position >= self.samples.len()
     }
 
+    pub fn skip_forward(&self, seconds: f32) -> Duration {
+        let current_time = self.get_current_time();
+        let new_time = current_time + Duration::from_secs_f32(seconds);
+        let total_duration = self.get_total_duration();
+
+        let clamped_time = if new_time > total_duration {
+            total_duration
+        } else {
+            new_time
+        };
+
+        self.seek_to_time(clamped_time);
+        clamped_time
+    }
+
+    pub fn skip_backward(&self, seconds: f32) -> Duration {
+        let current_time = self.get_current_time();
+        let seconds_duration = Duration::from_secs_f32(seconds);
+
+        let new_time = if current_time > seconds_duration {
+            current_time - seconds_duration
+        } else {
+            Duration::ZERO
+        };
+
+        self.seek_to_time(new_time);
+        new_time
+    }
+
+    pub fn pause(&self) {
+        let mut paused = self.is_paused.lock().unwrap();
+        *paused = true;
+    }
+
+    pub fn resume(&self) {
+        let mut paused = self.is_paused.lock().unwrap();
+        *paused = false;
+    }
+
     pub fn toggle(&self) {
         let mut paused = self.is_paused.lock().unwrap();
         *paused = !(*paused);

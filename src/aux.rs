@@ -220,6 +220,25 @@ impl AudioOutput {
         });
     }
 
+    pub fn update_current_playback_time(&self, new_time: Duration) {
+        let mut current_time = self.current_playback_time.lock().unwrap();
+        *current_time = new_time;
+    }
+
+    pub fn clear_buffers(&self) {
+        // new scope to quickly mut playback buffer
+        {
+            let mut buf = self.buffer.lock().unwrap();
+            buf.clear();
+        }
+
+        // new scope to quickly mut results buffer
+        {
+            let mut results = self.analysis_results.lock().unwrap();
+            results.clear();
+        }
+    }
+
     fn check_and_display_analysis(
         analysis_results: &Arc<Mutex<BinaryHeap<Reverse<AnalysisResult>>>>,
         current_time: Duration,

@@ -69,6 +69,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if line.trim().eq_ignore_ascii_case("k") {
                 audio_output.toggle();
+                streamer.toggle();
+            }
+
+            if line.trim().eq_ignore_ascii_case("l") {
+                // go foward 5 secs
+                let new_playback_time = streamer.skip_forward(5.0);
+                audio_output.clear_buffers();
+                audio_output.update_current_playback_time(new_playback_time);
+            }
+            if line.trim().eq_ignore_ascii_case("j") {
+                // go backward 5 secs
+                let new_playback_time = streamer.skip_backward(5.0);
+                audio_output.clear_buffers();
+                audio_output.update_current_playback_time(new_playback_time);
             }
         }
     });

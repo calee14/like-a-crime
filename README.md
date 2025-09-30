@@ -1,8 +1,8 @@
 # like a crime
 
 ```pseudocode
-- (fast) fourier transform
-- over-engineered slop
+(fast) fourier transform
+over-engineered slop
 ```
 
 ## install dependencies

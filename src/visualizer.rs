@@ -79,8 +79,8 @@ impl TerminalVisualizer {
 
     fn render_frame(data: &VisualizerData, waveform_width: usize, history_lines: usize) {
         print!("\x1B[?25l"); // hide cursor
-        // Clear only content area (lines 1-27)
-        for line in 1..28 {
+        // Clear only content area
+        for line in 1..30 {
             print!("\x1B[{};0H\x1B[2K", line);
         }
 
