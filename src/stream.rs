@@ -14,6 +14,9 @@ pub struct AudioStreamer {
 
     chunk_size: usize,
     update_interval: Duration,
+
+    // pause control
+    is_paused: Arc<Mutex<bool>>,
 }
 
 impl AudioStreamer {
@@ -44,6 +47,7 @@ impl AudioStreamer {
                 analysis_sender: analysis_tx,
                 chunk_size,
                 update_interval,
+                is_paused: Arc::new(Mutex::new(false)),
             },
             audio_rx,
             analysis_rx,
@@ -58,11 +62,20 @@ impl AudioStreamer {
         let analysis_sender = self.analysis_sender.clone();
         let chunk_size = self.chunk_size;
         let update_interval = self.update_interval;
+        let is_paused = self.is_paused.clone();
 
         thread::spawn(move || {
             let mut last_update = Instant::now();
 
             loop {
+                // check if paused
+                let paused = *is_paused.lock().unwrap();
+                if paused {
+                    thread::sleep(Duration::from_millis(50));
+                    last_update = Instant::now();
+                    continue;
+                }
+
                 // wait for next update
                 let elapsed = last_update.elapsed();
                 if elapsed < update_interval {
@@ -136,5 +149,10 @@ impl AudioStreamer {
     pub fn is_finished(&self) -> bool {
         let position = *self.current_position.lock().unwrap();
         position >= self.samples.len()
+    }
+
+    pub fn toggle(&self) {
+        let mut paused = self.is_paused.lock().unwrap();
+        *paused = !(*paused);
     }
 }

@@ -45,6 +45,10 @@ pub struct AudioOutput {
     current_playback_time: Arc<Mutex<Duration>>,
     sample_rate: f32,
     total_duration: Duration,
+    is_paused: Arc<Mutex<bool>>,
+    fade_samples: Arc<Mutex<usize>>,
+
+    // visualizer
     visualizer_data: Arc<Mutex<VisualizerData>>,
 }
 
@@ -65,6 +69,8 @@ impl AudioOutput {
             sample_rate,
             total_duration,
             visualizer_data,
+            is_paused: Arc::new(Mutex::new(false)),
+            fade_samples: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -96,10 +102,40 @@ impl AudioOutput {
         let visualizer_data = self.visualizer_data.clone();
         let sample_rate = self.sample_rate;
         let total_duration = self.total_duration;
+        let is_paused = self.is_paused.clone();
 
+        // 5 ms of fade
+        let fade_duration_samples = (sample_rate * 0.005) as usize;
+        let fade_samples = self.fade_samples.clone();
+
+        // build stream object
+        // move ownership of cloned pointers to callback
+        // stream will periodically invoke callback per sample rate
         let stream = device.build_output_stream(
             &config,
             move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                let paused = *is_paused.lock().unwrap();
+                let mut fade_count = fade_samples.lock().unwrap();
+
+                if paused {
+                    let mut buf = playback_buffer.lock().unwrap();
+
+                    // output silence
+                    for sample in data.iter_mut() {
+                        if *fade_count < fade_duration_samples {
+                            let audio_sample = buf.pop_front().unwrap_or(0.0);
+                            let fade_multiplier =
+                                1.0 - (*fade_count as f32 / fade_duration_samples as f32);
+                            *sample = audio_sample * fade_multiplier;
+                            *fade_count += 2;
+                        } else {
+                            *sample = 0.0;
+                        }
+                    }
+                    return;
+                }
+
+                // load samples from playback buffer into data vector of stream obj
                 let mut buf = playback_buffer.lock().unwrap();
                 let mut current_timestamp = current_time.lock().unwrap();
 
@@ -211,6 +247,27 @@ impl AudioOutput {
             } else {
                 break; // Stop when we hit a future timestamp
             }
+        }
+    }
+
+    pub fn pause(&self) {
+        let mut paused = self.is_paused.lock().unwrap();
+        *paused = true;
+    }
+
+    pub fn resume(&self) {
+        let mut paused = self.is_paused.lock().unwrap();
+        let mut fade = self.fade_samples.lock().unwrap();
+        *paused = false;
+        *fade = 0;
+    }
+
+    pub fn toggle(&self) {
+        let mut paused = self.is_paused.lock().unwrap();
+        *paused = !(*paused);
+        if !*paused {
+            let mut fade = self.fade_samples.lock().unwrap();
+            *fade = 0;
         }
     }
 }

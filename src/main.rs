@@ -67,6 +67,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 *should_quit = true;
                 break;
             }
+            if line.trim().eq_ignore_ascii_case("k") {
+                audio_output.toggle();
+            }
         }
     });
 
