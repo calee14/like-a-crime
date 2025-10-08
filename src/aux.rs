@@ -174,7 +174,7 @@ impl AudioOutput {
 
                 // warn
                 if buf.len() < 4410 {
-                    println!("Audio buffer running low: {} samples", buf.len());
+                    // println!("Audio buffer running low: {} samples", buf.len());
                 }
             },
             |err| eprintln!("Audio output error: {}", err),

@@ -1,5 +1,7 @@
 # like a crime
 
+<img src="demo.png" alt="demo image" height="500">
+
 ```pseudocode
 (fast) fourier transform
 over-engineered slop

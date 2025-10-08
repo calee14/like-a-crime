@@ -8,10 +8,11 @@ mod visualizer;
 mod window;
 
 use std::io::BufRead;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
-use std::{io, thread};
+use std::{io, path, thread};
 
 use crate::analyzer::AudioAnalyzer;
 use crate::audio::decode_audio_wav;
@@ -21,10 +22,57 @@ use crate::visualizer::TerminalVisualizer;
 
 static SAMPLE_RATE: f32 = 44100.0;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<String> = std::env::args().collect();
-    let path = args.get(1).expect("file path not provided");
+enum OP {
+    Record,
+    Analyze,
+}
 
+fn main() {
+    for arg in std::env::args() {
+        println!("{}", arg);
+    }
+
+    let args: Vec<String> = std::env::args().collect();
+    let first_arg = args.get(1).unwrap().as_str();
+    let op = match first_arg {
+        "-r" => OP::Record,
+        "-a" => OP::Analyze,
+        _ => panic!("must specify argument -r (record) or -a (analyze)"),
+    };
+
+    let should_main_quit = Arc::new(Mutex::new(false));
+    let should_main_quit_clone = should_main_quit.clone();
+
+    match op {
+        OP::Record => {}
+        OP::Analyze => {
+            let path = args.get(2).expect("file path not provided").clone();
+            thread::spawn(move || {
+                let _ = analyze_loop(&path, should_main_quit_clone);
+            });
+        }
+    }
+
+    // keep main loop alive and control threads
+    loop {
+        let should_quit = should_main_quit.lock().unwrap();
+        if *should_quit {
+            break;
+        }
+
+        // explicitly drop lock bc of sleep
+        // avoid deadlock
+        drop(should_quit);
+        std::thread::sleep(Duration::from_millis(500));
+
+        // println!("Current time: {:?}", streamer.get_current_time());
+    }
+}
+
+fn analyze_loop(
+    path: &String,
+    should_quit: Arc<Mutex<bool>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // load audio file
     let (samples, sample_rate) = decode_audio_wav(path, SAMPLE_RATE)?;
     let total_duration = Duration::from_secs_f32(samples.len() as f32 / sample_rate);
@@ -55,7 +103,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     visualizer.start_rendering();
 
     // input detection
-    let should_quit = Arc::new(Mutex::new(false));
     let should_quit_clone = should_quit.clone();
 
     thread::spawn(move || {
@@ -87,7 +134,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // keep main loop alive and control threads
     loop {
         let should_quit = should_quit.lock().unwrap();
         if *should_quit {
@@ -101,7 +147,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // println!("Current time: {:?}", streamer.get_current_time());
     }
-
     // visualizer.cleanup();
     Ok(())
 }
