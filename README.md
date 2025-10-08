@@ -1,11 +1,11 @@
 # like a crime
 
-<img src="demo.png" alt="demo image" height="500">
-
 ```pseudocode
 (fast) fourier transform
 over-engineered slop
 ```
+
+<img src="demo.png" alt="demo image" height="500">
 
 ## install dependencies
 
@@ -24,8 +24,8 @@ cargo build
 ## usage
 
 ```bash
-cargo run -- <your-audio-file>.wav
-
+cargo run -- -a <your-audio-file>.wav
+cargo run -- -s # in the works 
 ```
 
 ### build for release
