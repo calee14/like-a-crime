@@ -4,10 +4,15 @@ use crossterm::cursor::{self, MoveToColumn};
 use crossterm::event::{Event, KeyCode};
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{event, execute, terminal};
-use fundsp::hacker::{hammond_hz, multipass, reverb_stereo, sine, sine_hz, soft_saw_hz, square_hz};
+use fundsp::hacker::{
+    hammond_hz, multipass, reverb_stereo, shared, sine, sine_hz, soft_saw_hz, square_hz, var,
+    var_fn,
+};
 use fundsp::math::midi_hz;
 use fundsp::prelude::AudioUnit;
+use fundsp::shared::Shared;
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -19,11 +24,18 @@ use std::time::Duration;
 /// duration in seconds. This function is blocking for the duration of playback.
 pub fn run_synthesizer(should_quit: Arc<Mutex<bool>>) -> Result<(), Box<dyn std::error::Error>> {
     let (tx, rx) = mpsc::channel();
-
     let should_quit_clone = should_quit.clone();
 
+    let gate = shared(0.0);
+    let frequency = shared(midi_hz(60.0));
+
+    let audio_graph = create_gated_sine(gate.clone(), frequency.clone());
+
+    // start output stream to play audio graph
+    run_output(audio_graph);
+
+    let _ = terminal::enable_raw_mode();
     let input_thread = thread::spawn(move || {
-        let _ = terminal::enable_raw_mode();
         loop {
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(event) = event::read()
@@ -42,9 +54,6 @@ pub fn run_synthesizer(should_quit: Arc<Mutex<bool>>) -> Result<(), Box<dyn std:
     });
 
     let mut stdout = io::stdout();
-    // execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
-    // writeln!(stdout, "press 'q' to exit\n")?;
-    // stdout.flush()?;
 
     loop {
         if let Ok(key_code) = rx.try_recv() {
@@ -55,13 +64,28 @@ pub fn run_synthesizer(should_quit: Arc<Mutex<bool>>) -> Result<(), Box<dyn std:
                     stdout.flush()?;
                     break;
                 }
-                KeyCode::Char('a') => {
-                    execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
-                    writeln!(stdout, "[Synth Thread] 'a' received\n")?;
-                    stdout.flush()?;
+                KeyCode::Char('a')
+                | KeyCode::Char('s')
+                | KeyCode::Char('d')
+                | KeyCode::Char('f') => {
+                    let midi_note = match key_code {
+                        KeyCode::Char('a') => 60.0,
+                        KeyCode::Char('s') => 62.0,
+                        KeyCode::Char('d') => 64.0,
+                        KeyCode::Char('f') => 65.0,
+                        _ => 60.0,
+                    };
+
+                    frequency.set_value(midi_hz(midi_note));
+                    gate.set_value(1.0);
                 }
                 _ => {}
-            }
+            };
+        }
+
+        if gate.value() > 0.0 && rx.try_recv().is_err() {
+            // turn off sound
+            gate.set_value(0.0);
         }
 
         thread::sleep(Duration::from_millis(50));
@@ -189,5 +213,15 @@ fn create_simple_fm() -> Box<dyn AudioUnit> {
     let f = 440.0;
     let m = 5.0;
     let synth = (sine_hz(f) * f * m + f) >> sine();
+    Box::new(synth)
+}
+
+fn create_gated_sine(gate: Shared, frequency: Shared) -> Box<dyn AudioUnit> {
+    let freq_var = var_fn(&frequency, |f| f);
+
+    let gate_var = var(&gate);
+
+    let synth = (freq_var >> sine()) * gate_var;
+
     Box::new(synth)
 }
