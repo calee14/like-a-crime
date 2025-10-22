@@ -7,7 +7,7 @@ over-engineered slop
 
 <img src="demo.png" alt="demo image" height="500">
 
-## install dependencies
+## setup
 
 ### clone repo
 

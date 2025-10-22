@@ -4,6 +4,7 @@ mod aux;
 mod fft;
 mod notes;
 mod stream;
+mod synth;
 mod visualizer;
 mod window;
 
@@ -23,7 +24,7 @@ use crate::visualizer::TerminalVisualizer;
 static SAMPLE_RATE: f32 = 44100.0;
 
 enum OP {
-    Record,
+    Synth,
     Analyze,
 }
 
@@ -35,7 +36,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let first_arg = args.get(1).unwrap().as_str();
     let op = match first_arg {
-        "-r" => OP::Record,
+        "-s" => OP::Synth,
         "-a" => OP::Analyze,
         _ => panic!("must specify argument -r (record) or -a (analyze)"),
     };
@@ -44,7 +45,11 @@ fn main() {
     let should_main_quit_clone = should_main_quit.clone();
 
     match op {
-        OP::Record => {}
+        OP::Synth => {
+            synth::start_synthesis(5);
+
+            *should_main_quit_clone.lock().unwrap() = true;
+        }
         OP::Analyze => {
             let path = args.get(2).expect("file path not provided").clone();
             thread::spawn(move || {
