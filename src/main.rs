@@ -46,9 +46,9 @@ fn main() {
 
     match op {
         OP::Synth => {
-            synth::start_synthesis(5);
-
-            *should_main_quit_clone.lock().unwrap() = true;
+            thread::spawn(move || {
+                let _ = synth::run_synthesizer(should_main_quit_clone);
+            });
         }
         OP::Analyze => {
             let path = args.get(2).expect("file path not provided").clone();

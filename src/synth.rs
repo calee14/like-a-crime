@@ -1,28 +1,88 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, FromSample, SampleFormat, SizedSample, StreamConfig};
+use crossterm::cursor::{self, MoveToColumn};
+use crossterm::event::{Event, KeyCode};
+use crossterm::terminal::{Clear, ClearType};
+use crossterm::{event, execute, terminal};
 use fundsp::hacker::{hammond_hz, multipass, reverb_stereo, sine, sine_hz, soft_saw_hz, square_hz};
 use fundsp::math::midi_hz;
 use fundsp::prelude::AudioUnit;
-use std::sync::Arc;
+use std::io::{self, Write};
+use std::sync::{Arc, Mutex, mpsc};
+use std::thread;
 use std::time::Duration;
-
 // ------------------------------------------------------------------
 // Public Entry Point
 // ------------------------------------------------------------------
 
 /// Starts the audio synthesis, playing a sine wave (A4, 440Hz) for the specified
 /// duration in seconds. This function is blocking for the duration of playback.
-pub fn start_synthesis(duration_secs: u64) {
-    // Change the `create_sine_440` function to any of the other create_* functions
-    // below to change the sound that is generated.
-    let audio_graph = create_simple_fm();
+pub fn run_synthesizer(should_quit: Arc<Mutex<bool>>) -> Result<(), Box<dyn std::error::Error>> {
+    let (tx, rx) = mpsc::channel();
 
-    // Start the output stream and play the audio on a separate thread
-    run_output(audio_graph);
+    let should_quit_clone = should_quit.clone();
 
-    // Block the current thread for the specified duration to allow the sound to be heard.
-    println!("Playing sound for {} seconds...", duration_secs);
-    std::thread::sleep(Duration::from_secs(duration_secs));
+    let input_thread = thread::spawn(move || {
+        let _ = terminal::enable_raw_mode();
+        loop {
+            if event::poll(Duration::from_millis(100)).unwrap_or(false)
+                && let Ok(event) = event::read()
+                && let Event::Key(key_event) = event
+                && tx.send(key_event.code).is_err()
+            {
+                break;
+            }
+            let should_quit = should_quit_clone.lock().unwrap();
+            if *should_quit {
+                break;
+            }
+            drop(should_quit);
+            thread::sleep(Duration::from_millis(10));
+        }
+    });
+
+    let mut stdout = io::stdout();
+    // execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+    // writeln!(stdout, "press 'q' to exit\n")?;
+    // stdout.flush()?;
+
+    loop {
+        if let Ok(key_code) = rx.try_recv() {
+            match key_code {
+                KeyCode::Char('q') => {
+                    execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+                    writeln!(stdout, "[Synth Thread] 'q' received. shutting down...\n")?;
+                    stdout.flush()?;
+                    break;
+                }
+                KeyCode::Char('a') => {
+                    execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+                    writeln!(stdout, "[Synth Thread] 'a' received\n")?;
+                    stdout.flush()?;
+                }
+                _ => {}
+            }
+        }
+
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    // end loop in all threads
+    *should_quit.lock().unwrap() = true;
+    let _ = input_thread.join();
+
+    let _ = terminal::disable_raw_mode();
+    stdout.flush()?;
+    Ok(())
+    // let audio_graph = create_simple_fm();
+    //
+    // // Start the output stream and play the audio on a separate thread
+    // run_output(audio_graph);
+    //
+    //
+    // // Block the current thread for the specified duration to allow the sound to be heard.
+    // println!("Playing sound for {} seconds...", duration_secs);
+    // std::thread::sleep(Duration::from_secs(duration_secs));
 }
 
 // ------------------------------------------------------------------
@@ -131,4 +191,3 @@ fn create_simple_fm() -> Box<dyn AudioUnit> {
     let synth = (sine_hz(f) * f * m + f) >> sine();
     Box::new(synth)
 }
-
