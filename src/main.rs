@@ -29,10 +29,6 @@ enum OP {
 }
 
 fn main() {
-    for arg in std::env::args() {
-        println!("{}", arg);
-    }
-
     let args: Vec<String> = std::env::args().collect();
     let first_arg = args.get(1).unwrap().as_str();
     let op = match first_arg {

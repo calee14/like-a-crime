@@ -1,9 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, FromSample, SampleFormat, SizedSample, StreamConfig};
-use crossterm::cursor::{self, MoveToColumn};
-use crossterm::event::{Event, KeyCode};
-use crossterm::terminal::{Clear, ClearType};
-use crossterm::{event, execute, terminal};
 use fundsp::hacker::{
     hammond_hz, multipass, reverb_stereo, shared, sine, sine_hz, soft_saw_hz, square_hz, var,
     var_fn,
@@ -11,14 +7,21 @@ use fundsp::hacker::{
 use fundsp::math::midi_hz;
 use fundsp::prelude::AudioUnit;
 use fundsp::shared::Shared;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
-// ------------------------------------------------------------------
-// Public Entry Point
-// ------------------------------------------------------------------
+use termion::event::{Event, Key};
+use termion::input::TermRead;
+use termion::raw::IntoRawMode;
+
+#[derive(Debug, Clone, Copy)]
+enum InputEvent {
+    KeyDown(char),
+    KeyUp,
+    Quit,
+}
 
 /// Starts the audio synthesis, playing a sine wave (A4, 440Hz) for the specified
 /// duration in seconds. This function is blocking for the duration of playback.
@@ -34,58 +37,63 @@ pub fn run_synthesizer(should_quit: Arc<Mutex<bool>>) -> Result<(), Box<dyn std:
     // start output stream to play audio graph
     run_output(audio_graph);
 
-    let _ = terminal::enable_raw_mode();
+    let raw_stdout = io::stdout().into_raw_mode()?;
+
     let input_thread = thread::spawn(move || {
-        loop {
-            if event::poll(Duration::from_millis(100)).unwrap_or(false)
-                && let Ok(event) = event::read()
-                && let Event::Key(key_event) = event
-                && tx.send(key_event.code).is_err()
-            {
-                break;
+        let stdin_events = io::stdin().events();
+
+        for event_results in stdin_events {
+            if let Ok(event) = event_results {
+                let msg = match event {
+                    Event::Key(Key::Char('q')) => InputEvent::Quit,
+                    Event::Key(Key::Char(note @ ('a' | 's' | 'd' | 'f'))) => {
+                        InputEvent::KeyDown(note)
+                    }
+                    _ => InputEvent::KeyUp,
+                };
+
+                if tx.send(msg).is_err() {
+                    break;
+                }
             }
             let should_quit = should_quit_clone.lock().unwrap();
             if *should_quit {
                 break;
             }
             drop(should_quit);
-            thread::sleep(Duration::from_millis(10));
         }
     });
 
-    let mut stdout = io::stdout();
+    let mut current_note: Option<char> = None;
 
     loop {
-        if let Ok(key_code) = rx.try_recv() {
-            match key_code {
-                KeyCode::Char('q') => {
-                    execute!(stdout, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
-                    writeln!(stdout, "[Synth Thread] 'q' received. shutting down...\n")?;
-                    stdout.flush()?;
+        if let Ok(event) = rx.try_recv() {
+            match event {
+                InputEvent::Quit => {
+                    raw_stdout.suspend_raw_mode()?;
+                    drop(raw_stdout);
                     break;
                 }
-                KeyCode::Char('a')
-                | KeyCode::Char('s')
-                | KeyCode::Char('d')
-                | KeyCode::Char('f') => {
-                    let midi_note = match key_code {
-                        KeyCode::Char('a') => 60.0,
-                        KeyCode::Char('s') => 62.0,
-                        KeyCode::Char('d') => 64.0,
-                        KeyCode::Char('f') => 65.0,
-                        _ => 60.0,
-                    };
-
-                    frequency.set_value(midi_hz(midi_note));
-                    gate.set_value(1.0);
+                InputEvent::KeyDown(key_char) => {
+                    if current_note != Some(key_char) {
+                        current_note = Some(key_char);
+                        let midi_note = match key_char {
+                            'a' => 60.0,
+                            's' => 62.0,
+                            'd' => 64.0,
+                            'f' => 65.0,
+                            _ => 60.0,
+                        };
+                        frequency.set_value(midi_hz(midi_note));
+                        gate.set_value(1.0);
+                    }
+                }
+                InputEvent::KeyUp => {
+                    current_note = None;
+                    gate.set_value(0.0);
                 }
                 _ => {}
             };
-        }
-
-        if gate.value() > 0.0 && rx.try_recv().is_err() {
-            // turn off sound
-            gate.set_value(0.0);
         }
 
         thread::sleep(Duration::from_millis(50));
@@ -95,8 +103,7 @@ pub fn run_synthesizer(should_quit: Arc<Mutex<bool>>) -> Result<(), Box<dyn std:
     *should_quit.lock().unwrap() = true;
     let _ = input_thread.join();
 
-    let _ = terminal::disable_raw_mode();
-    stdout.flush()?;
+    io::stdout().flush()?;
     Ok(())
     // let audio_graph = create_simple_fm();
     //
