@@ -3,6 +3,7 @@ mod audio;
 mod aux;
 mod fft;
 mod notes;
+mod soundboard;
 mod stream;
 mod synth;
 mod visualizer;
@@ -42,9 +43,7 @@ fn main() {
 
     match op {
         OP::Synth => {
-            thread::spawn(move || {
-                let _ = synth::run_synthesizer(should_main_quit_clone);
-            });
+            let _ = synth::run_synthesizer(should_main_quit_clone);
         }
         OP::Analyze => {
             let path = args.get(2).expect("file path not provided").clone();

@@ -1,5 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, FromSample, SampleFormat, SizedSample, StreamConfig};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use fundsp::hacker::{
     hammond_hz, multipass, reverb_stereo, shared, sine, sine_hz, soft_saw_hz, square_hz, var,
     var_fn,
@@ -7,113 +9,47 @@ use fundsp::hacker::{
 use fundsp::math::midi_hz;
 use fundsp::prelude::AudioUnit;
 use fundsp::shared::Shared;
-use std::io::{self, BufRead, Read, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::any::Any;
+use std::io::{self, Write};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-use std::time::Duration;
-use termion::event::{Event, Key};
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
+use std::time::{Duration, Instant};
+
+use crate::soundboard::SynthApp;
 
 #[derive(Debug, Clone, Copy)]
 enum InputEvent {
     KeyDown(char),
-    KeyUp,
+    KeyUp(char),
     Quit,
 }
 
 /// Starts the audio synthesis, playing a sine wave (A4, 440Hz) for the specified
 /// duration in seconds. This function is blocking for the duration of playback.
 pub fn run_synthesizer(should_quit: Arc<Mutex<bool>>) -> Result<(), Box<dyn std::error::Error>> {
-    let (tx, rx) = mpsc::channel();
-    let should_quit_clone = should_quit.clone();
-
     let gate = shared(0.0);
     let frequency = shared(midi_hz(60.0));
-
     let audio_graph = create_gated_sine(gate.clone(), frequency.clone());
-
+    let should_quit_clone = should_quit.clone();
     // start output stream to play audio graph
     run_output(audio_graph);
 
-    let raw_stdout = io::stdout().into_raw_mode()?;
+    let options = eframe::NativeOptions::default();
 
-    let input_thread = thread::spawn(move || {
-        let stdin_events = io::stdin().events();
+    eframe::run_native(
+        "rust synth",
+        options,
+        Box::new(move |cc| {
+            let should_quit = should_quit_clone.clone();
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
 
-        for event_results in stdin_events {
-            if let Ok(event) = event_results {
-                let msg = match event {
-                    Event::Key(Key::Char('q')) => InputEvent::Quit,
-                    Event::Key(Key::Char(note @ ('a' | 's' | 'd' | 'f'))) => {
-                        InputEvent::KeyDown(note)
-                    }
-                    _ => InputEvent::KeyUp,
-                };
+            Ok(Box::new(SynthApp::new(gate, frequency, should_quit)))
+        }),
+    )?;
 
-                if tx.send(msg).is_err() {
-                    break;
-                }
-            }
-            let should_quit = should_quit_clone.lock().unwrap();
-            if *should_quit {
-                break;
-            }
-            drop(should_quit);
-        }
-    });
-
-    let mut current_note: Option<char> = None;
-
-    loop {
-        if let Ok(event) = rx.try_recv() {
-            match event {
-                InputEvent::Quit => {
-                    raw_stdout.suspend_raw_mode()?;
-                    drop(raw_stdout);
-                    break;
-                }
-                InputEvent::KeyDown(key_char) => {
-                    if current_note != Some(key_char) {
-                        current_note = Some(key_char);
-                        let midi_note = match key_char {
-                            'a' => 60.0,
-                            's' => 62.0,
-                            'd' => 64.0,
-                            'f' => 65.0,
-                            _ => 60.0,
-                        };
-                        frequency.set_value(midi_hz(midi_note));
-                        gate.set_value(1.0);
-                    }
-                }
-                InputEvent::KeyUp => {
-                    current_note = None;
-                    gate.set_value(0.0);
-                }
-                _ => {}
-            };
-        }
-
-        thread::sleep(Duration::from_millis(50));
-    }
-
-    // end loop in all threads
     *should_quit.lock().unwrap() = true;
-    let _ = input_thread.join();
 
-    io::stdout().flush()?;
     Ok(())
-    // let audio_graph = create_simple_fm();
-    //
-    // // Start the output stream and play the audio on a separate thread
-    // run_output(audio_graph);
-    //
-    //
-    // // Block the current thread for the specified duration to allow the sound to be heard.
-    // println!("Playing sound for {} seconds...", duration_secs);
-    // std::thread::sleep(Duration::from_secs(duration_secs));
 }
 
 // ------------------------------------------------------------------
